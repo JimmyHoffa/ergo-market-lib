@@ -1,0 +1,24 @@
+{
+    "compilerOptions": {
+        "outDir": "./dist/",
+        "sourceMap": true,
+        "strict": true,
+        "noImplicitReturns": true,
+        "noImplicitAny": true,
+        "module": "CommonJS",
+        "moduleResolution": "node",
+        "declaration": true,
+        "esModuleInterop": true,
+        "target": "ESNext",
+        "allowJs": true,
+        "allowSyntheticDefaultImports": true,
+        "lib": ["es2020"],
+        "typeRoots": ["node_modules/@types"],
+        "paths": {"*": ["types/*"]},
+        "baseUrl": "./"
+    },
+    "include": [
+        "./src/**/*.ts", "./src/**/*.js"
+    ],
+    "exclude": ["node_modules", "dist", "./src/**/*.test.*"]
+}
