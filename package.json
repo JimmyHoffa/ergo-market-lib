@@ -1,5 +1,5 @@
 {
-  "name": "ergo-price-lib",
+  "name": "ergo-market-lib",
   "version": "1.0.0",
   "description": "Library for retrieving swap prices of ergo tokens",
   "main": "./index.js",
