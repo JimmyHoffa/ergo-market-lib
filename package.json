@@ -2,9 +2,9 @@
   "name": "ergo-market-lib",
   "version": "1.0.0",
   "description": "Library for retrieving swap prices of ergo tokens",
-  "main": "./index.js",
-  "module": "./index.js",
-  "types": "./index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -p .",
     "lint": "eslint src",
