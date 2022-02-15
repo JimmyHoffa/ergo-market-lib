@@ -5,5 +5,7 @@ export interface ITokenRate extends ITokenDetail {
   // tokenPerSigUSD: number;
   ergPerToken: number;
   tokenPerErg: number;
+  ergAmount: BigInt;
+  tokenAmount: BigInt;
   timestamp: number; // Unix epoch is more efficient for storage than the ISO8601 and moment can keep it straight. Always work in UTC, only use locale on display.
 }

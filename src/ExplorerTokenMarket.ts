@@ -31,6 +31,8 @@ export const tokenSwapValueFromBox = (box: IBox): ITokenRate => {
     timestamp: moment.utc().valueOf(), // accurately parseable and malleable timestamp
     ergPerToken,
     tokenPerErg,
+    ergAmount: JSONBI.parse(ergAmount),
+    tokenAmount: JSONBI.parse(tokenAmount),
     token: tokenInfo,
   };
 };

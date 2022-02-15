@@ -26,6 +26,8 @@ const tokenSwapValueFromBox = (box) => {
         timestamp: moment_1.default.utc().valueOf(),
         ergPerToken,
         tokenPerErg,
+        ergAmount: JSONBI.parse(ergAmount),
+        tokenAmount: JSONBI.parse(tokenAmount),
         token: tokenInfo,
     };
 };
