@@ -5,4 +5,5 @@ export interface ITokenRate extends ITokenDetail {
     ergAmount: string;
     tokenAmount: string;
     timestamp: number;
+    globalIndex: number;
 }

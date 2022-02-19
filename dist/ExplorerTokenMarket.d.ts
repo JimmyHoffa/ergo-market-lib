@@ -4,7 +4,7 @@ import { IAddressTokenAmounts } from './interfaces/IAddressTokenAmounts';
 import { ITokenInfo } from './interfaces/ITokenInfo';
 import { ITokenMarket } from './interfaces/ITokenMarket';
 import { ITokenRate } from './interfaces/ITokenRate';
-export declare const tokenSwapValueFromBox: (box: IBox) => ITokenRate;
+export declare const tokenSwapValueFromBox: (box: IBox, timestamp?: number) => ITokenRate;
 export declare type ExplorerTokenMarketConfig = {
     explorerUri?: string;
     defaultRetryCount?: number;
@@ -19,6 +19,8 @@ export declare class ExplorerTokenMarket implements ITokenMarket {
     private defaultRetryWaitMillis;
     private throwOnError;
     constructor({ explorerUri, defaultRetryCount, defaultRetryWaitMillis, throwOnError, axiosInstanceConfig, }?: ExplorerTokenMarketConfig);
+    getTransactionTimestamp(transactionId: string, numberOfTimesToRetry?: number, retryWaitTime?: number): Promise<number | undefined>;
+    getHistoricalTokenRates(numberToRetrieve?: number, initialOffset?: number, numberOfTimesToRetry?: number, retryWaitTime?: number): Promise<ITokenRate[]>;
     getTokenRates(numberOfTimesToRetry?: number, retryWaitTime?: number): Promise<ITokenRate[]>;
     multiplyFractions(amountA: number, decimalsA: number, amountB: number, decimalsB: number): any;
     decorateTokenAmountsWithValues(value: ITokenRate, tokenAmountsMap: IAddressTokenAmounts): void;

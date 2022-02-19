@@ -3,6 +3,103 @@ import { ExplorerTokenMarket } from './ExplorerTokenMarket';
 import { tokenSwapValuesExample } from './ExplorerTokenMarket.test.samples';
 
 const JSONBI = JSONBigInt({ useNativeBigInt: true });
+jest.setTimeout(200000);
+describe('getHistoricalTokenRates', () => {
+  it('should return an empty array when it cant retrieve data', async () => {
+    const expectedSwapValues: any[] = [];
+    const tokenSwapMarketRepo = new ExplorerTokenMarket({ explorerUri: 'http://test.example.com', defaultRetryCount: 1, defaultRetryWaitMillis: 150, throwOnError: false, axiosInstanceConfig: { timeout: 100 }});
+    
+    const actualSwapValues = await tokenSwapMarketRepo.getHistoricalTokenRates(2000);
+
+    expect(actualSwapValues).toEqual(expectedSwapValues);
+  });
+  it('should return less than 500 historical token rates succesfully in order', async () => {
+    jest.setTimeout(200000);
+    const expectedTokenRateCount = 40;
+    const tokenSwapMarketRepo = new ExplorerTokenMarket();
+    const actualSwapValues = await tokenSwapMarketRepo.getHistoricalTokenRates(expectedTokenRateCount, 23000);
+
+    expect(actualSwapValues.length).toBe(expectedTokenRateCount);
+    expect(actualSwapValues[0].ergPerToken).toBeDefined();
+    expect(actualSwapValues[0].tokenPerErg).toBeDefined();
+    expect(actualSwapValues[0].ergAmount).toBeDefined();
+    expect(actualSwapValues[0].tokenAmount).toBeDefined();
+    expect(actualSwapValues[0].token).toBeDefined();
+    expect(actualSwapValues[0].timestamp).toBeDefined();
+    actualSwapValues.forEach((tokenRate, index) => {
+      const nextTokenRate = actualSwapValues[index+1];
+      // console.log('CHECCCC', tokenRate, nextTokenRate);
+      if (nextTokenRate === undefined) return;
+      expect(tokenRate.timestamp).toBeLessThanOrEqual(nextTokenRate.timestamp);
+    })
+    jest.setTimeout(5000);
+  });
+  it('should return over 500 historical token rates succesfully in order', async () => {
+    jest.setTimeout(200000);
+    const expectedTokenRateCount = 501;
+    const tokenSwapMarketRepo = new ExplorerTokenMarket();
+    const actualSwapValues = await tokenSwapMarketRepo.getHistoricalTokenRates(expectedTokenRateCount);
+
+    expect(actualSwapValues.length).toBe(expectedTokenRateCount);
+    expect(actualSwapValues[0].ergPerToken).toBeDefined();
+    expect(actualSwapValues[0].tokenPerErg).toBeDefined();
+    expect(actualSwapValues[0].ergAmount).toBeDefined();
+    expect(actualSwapValues[0].tokenAmount).toBeDefined();
+    expect(actualSwapValues[0].token).toBeDefined();
+    expect(actualSwapValues[0].timestamp).toBeDefined();
+    actualSwapValues.forEach((tokenRate, index) => {
+      const nextTokenRate = actualSwapValues.length < index+1 ? actualSwapValues[index+1] : undefined;
+      if (nextTokenRate === undefined) return;
+      expect(tokenRate.timestamp).toBeLessThanOrEqual(nextTokenRate.timestamp);
+    })
+    jest.setTimeout(5000);
+  });
+  it('should return 1222 historical token rates succesfully in order', async () => {
+    jest.setTimeout(200000);
+    const expectedTokenRateCount = 1222;
+    const tokenSwapMarketRepo = new ExplorerTokenMarket();
+    const actualSwapValues = await tokenSwapMarketRepo.getHistoricalTokenRates(expectedTokenRateCount);
+
+    expect(actualSwapValues.length).toBe(expectedTokenRateCount);
+    expect(actualSwapValues[0].ergPerToken).toBeDefined();
+    expect(actualSwapValues[0].tokenPerErg).toBeDefined();
+    expect(actualSwapValues[0].ergAmount).toBeDefined();
+    expect(actualSwapValues[0].tokenAmount).toBeDefined();
+    expect(actualSwapValues[0].token).toBeDefined();
+    expect(actualSwapValues[0].timestamp).toBeDefined();
+    actualSwapValues.forEach((tokenRate, index) => {
+      const nextTokenRate = actualSwapValues.length < index+1 ? actualSwapValues[index+1] : undefined;
+      if (nextTokenRate === undefined) return;
+      expect(tokenRate.timestamp).toBeLessThanOrEqual(nextTokenRate.timestamp);
+    })
+    jest.setTimeout(5000);
+  });
+  // it('should return first and second historical token rates succesfully in order', async () => {
+  //   jest.setTimeout(200000);
+  //   const expectedTokenRateCount = 1;
+  //   const tokenSwapMarketRepo = new ExplorerTokenMarket();
+  //   const expectedSecondGlobalIndex = 7043807;
+  //   const firstActualSwapValue = await tokenSwapMarketRepo.getHistoricalTokenRates(expectedTokenRateCount, 0);
+  //   const secondActualSwapValue = await tokenSwapMarketRepo.getHistoricalTokenRates(expectedTokenRateCount, 1);
+
+  //   expect(firstActualSwapValue.length).toBe(expectedTokenRateCount);
+  //   expect(secondActualSwapValue.length).toBe(expectedTokenRateCount);
+  //   expect(firstActualSwapValue[0].ergPerToken).toBeDefined();
+  //   expect(secondActualSwapValue[0].ergPerToken).toBeDefined();
+  //   expect(firstActualSwapValue[0].tokenPerErg).toBeDefined();
+  //   expect(secondActualSwapValue[0].tokenPerErg).toBeDefined();
+  //   expect(firstActualSwapValue[0].ergAmount).toBeDefined();
+  //   expect(secondActualSwapValue[0].ergAmount).toBeDefined();
+  //   expect(firstActualSwapValue[0].tokenAmount).toBeDefined();
+  //   expect(secondActualSwapValue[0].tokenAmount).toBeDefined();
+  //   expect(firstActualSwapValue[0].token).toBeDefined();
+  //   expect(secondActualSwapValue[0].token).toBeDefined();
+  //   expect(firstActualSwapValue[0].timestamp).toBeDefined();
+  //   expect(secondActualSwapValue[0].timestamp).toBeDefined();
+  //   expect(firstActualSwapValue[0].globalIndex).toBeLessThan(secondActualSwapValue[0].globalIndex);
+  //   jest.setTimeout(5000);
+  // });
+});
 
 describe('getTokenRates', () => {
   it('should return an empty array when it cant retrieve data', async () => {
