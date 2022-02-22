@@ -33,7 +33,7 @@ export class ExplorerRequestManager {
         if (throwOnError) throw ex;
         return undefined;
       }
-      console.log('EX occurred on axios request, retry...');
+      console.log('EX occurred on axios request, retry...', (ex as any).message);
       return new Promise<T | undefined>((res) => {
         setTimeout(() => res(this.requestWithRetries<T>(config, retriesLeft - 1)), retryWaitTime);
       });

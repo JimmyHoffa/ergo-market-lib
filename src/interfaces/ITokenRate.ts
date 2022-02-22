@@ -1,8 +1,6 @@
 import { ITokenDetail } from './ITokenDetail';
 
 export interface ITokenRate extends ITokenDetail {
-  // sigUSDPerToken: number;
-  // tokenPerSigUSD: number;
   ergPerToken: number;
   tokenPerErg: number;
   ergAmount: string;

@@ -3,7 +3,7 @@ import JSONBigInt from 'json-bigint';
 import moment from 'moment';
 import { ExplorerRequestManager } from './ExplorerRequestManager';
 import { IAssetBalance, ITotalBalance } from './interfaces/explorer/IBalance';
-import { IBox } from './interfaces/explorer/IBox';
+import { IBox, ITimestampedBox } from './interfaces/explorer/IBox';
 import { IAddressTokenAmounts } from './interfaces/IAddressTokenAmounts';
 import { ITokenInfo } from './interfaces/ITokenInfo';
 import { ITokenMarket } from './interfaces/ITokenMarket';
@@ -34,7 +34,7 @@ export const tokenSwapValueFromBox = (box: IBox, timestamp = moment.utc().valueO
     ergAmount,
     tokenAmount,
     token: tokenInfo,
-    globalIndex: box.globalIndex
+    globalIndex: box.globalIndex,
   };
 };
 
@@ -80,14 +80,15 @@ export class ExplorerTokenMarket implements ITokenMarket {
     this.explorerHttpClient = new ExplorerRequestManager(this.explorerUri, this.throwOnError, axiosInstanceConfig);
   }
 
-  async getTransactionTimestamp(transactionId: string,
+  async getTransactionTimestamp(
+    transactionId: string,
     numberOfTimesToRetry = this.defaultRetryCount,
     retryWaitTime: number = this.defaultRetryWaitMillis
   ): Promise<number | undefined> {
     const transaction = await this.explorerHttpClient.requestWithRetries<{ timestamp: number }>(
       {
         url: `/api/v1/transactions/${transactionId}`,
-        params: { },
+        params: {},
         transformResponse: (data) => JSONBI.parse(data),
       },
       numberOfTimesToRetry,
@@ -96,18 +97,22 @@ export class ExplorerTokenMarket implements ITokenMarket {
     return transaction?.timestamp;
   }
 
-  async getHistoricalTokenRates(
-    numberToRetrieve: number = 500,
+  async getBoxesAtUri(
+    uriForBoxes: string,
+    numberToRetrieve = 500,
     initialOffset = 0,
     numberOfTimesToRetry = this.defaultRetryCount,
-    retryWaitTime: number = this.defaultRetryWaitMillis,
-  ): Promise<ITokenRate[]> {
+    retryWaitTime: number = this.defaultRetryWaitMillis
+  ): Promise<IBox[]> {
     let boxItems: IBox[] = [];
-    for(let numberLeftToRetrieve = numberToRetrieve; numberLeftToRetrieve > 0;){
+    for (let numberLeftToRetrieve = numberToRetrieve; numberLeftToRetrieve > 0; ) {
       const nextBoxItems = await this.explorerHttpClient.requestWithRetries<{ items: IBox[] }>(
         {
-          url: `/api/v1/boxes/byErgoTree/${PoolSample}`,
-          params: { limit: Math.min(500, numberLeftToRetrieve), offset: initialOffset + (numberToRetrieve - numberLeftToRetrieve) },
+          url: uriForBoxes,
+          params: {
+            limit: Math.min(500, numberLeftToRetrieve),
+            offset: initialOffset + (numberToRetrieve - numberLeftToRetrieve),
+          },
           transformResponse: (data) => JSONBI.parse(data),
         },
         numberOfTimesToRetry,
@@ -119,18 +124,177 @@ export class ExplorerTokenMarket implements ITokenMarket {
     }
 
     if (boxItems === undefined) return []; // Failed to retrieve values, we got nothin to give back.
+    return boxItems;
+  }
 
-    const tokenRatesOverTime: ITokenRate[] = [];
-    for(let boxItemChunk = 0; boxItemChunk < boxItems.length; boxItemChunk += 100) {
-      await Promise.all(new Array(100).fill(0).map(async (blank, index) => {
-        const boxItemIndex = boxItemChunk + index;
-        if (boxItemIndex >= boxItems.length) return;
-        const currentBox = boxItems[boxItemIndex];
-        const boxCreationTimestamp = await this.getTransactionTimestamp(currentBox.transactionId);
-        tokenRatesOverTime.push(tokenSwapValueFromBox(currentBox, boxCreationTimestamp))
-      }))
+  async makeChunkedRequests<T>(
+    requestConfigs: AxiosRequestConfig<T>[],
+    numberOfTimesToRetry = this.defaultRetryCount,
+    retryWaitTime: number = this.defaultRetryWaitMillis,
+    chunkSize = 100
+  ): Promise<T[]> {
+    const responseItems: T[] = [];
+    for (let requestConfigChunk = 0; requestConfigChunk < requestConfigs.length; requestConfigChunk += 100) {
+      await Promise.all(
+        new Array(chunkSize).fill(0).map(async (blank, index) => {
+          const configIndex = requestConfigChunk + index;
+          if (configIndex >= requestConfigs.length) return;
+          const currentConfig = requestConfigs[configIndex];
+          const currentResponse = await this.explorerHttpClient.requestWithRetries<T>(
+            currentConfig,
+            numberOfTimesToRetry,
+            retryWaitTime
+          );
+          if (currentResponse !== undefined) responseItems.push(currentResponse);
+        })
+      );
     }
-    return tokenRatesOverTime.sort((a, b) => a.timestamp > b.timestamp ? 1 : -1);
+    return responseItems;
+  }
+
+  async getTimestampsForBoxes(boxesWithoutCreationDates: IBox[]): Promise<ITimestampedBox[]> {
+    const transactionRequests = boxesWithoutCreationDates.map((box) => ({
+      url: `/api/v1/transactions/${box.transactionId}`,
+      params: {},
+      transformResponse: (data: any) => {
+        const tx: any = JSONBI.parse(data);
+        (box as ITimestampedBox).createdAt = tx.timestamp;
+        return box;
+      },
+    }));
+
+    const boxesOverTime = await this.makeChunkedRequests<ITimestampedBox>(transactionRequests);
+    return boxesOverTime.sort((a, b) => ((a.createdAt as any) > (b.createdAt as any) ? 1 : -1));
+  }
+
+  async getTokenRatesForTimestampedBoxes(boxesWithCreationDates: IBox[]): Promise<ITokenRate[]> {
+    return boxesWithCreationDates.map((box) => tokenSwapValueFromBox(box));
+  }
+
+  async getTimestampedBoxesFromBoxes(
+    boxesToTimestamp: IBox[],
+    numberOfTimesToRetry = this.defaultRetryCount,
+    retryWaitTime: number = this.defaultRetryWaitMillis
+  ): Promise<ITimestampedBox[]> {
+    const boxesWithCreationDatesRequest = boxesToTimestamp.map((box) => ({
+      url: `/api/v1/transactions/${box.transactionId}`,
+      params: {},
+      transformResponse: (data: any) => {
+        const tx: any = JSONBI.parse(data);
+        (box as ITimestampedBox).createdAt = tx.timestamp;
+        return box;
+      },
+    }));
+
+    const boxesWithSpendDatesRequest = boxesToTimestamp
+      .filter((box) => box.spentTransactionId?.length)
+      .map((box) => ({
+        url: `/api/v1/transactions/${box.spentTransactionId}`,
+        params: {},
+        transformResponse: (data: any) => {
+          const tx: any = JSONBI.parse(data);
+          box.spentAt = tx.timestamp;
+          return box;
+        },
+      }));
+
+    const boxesWithCreation = (
+      await this.makeChunkedRequests<ITimestampedBox>(
+        boxesWithCreationDatesRequest,
+        numberOfTimesToRetry,
+        retryWaitTime
+      )
+    ).sort((a, b) => (a.createdAt > b.createdAt ? 1 : -1));
+    await this.makeChunkedRequests<ITimestampedBox>(boxesWithSpendDatesRequest, numberOfTimesToRetry, retryWaitTime); // Adds spentAt to boxes in the transform response defined above
+    return boxesWithCreation;
+  }
+
+  async getBalanceTimelineAtAddress(
+    address: string,
+    numberToRetrieve = 500,
+    initialOffset = 0,
+    numberOfTimesToRetry = this.defaultRetryCount,
+    retryWaitTime: number = this.defaultRetryWaitMillis
+  ): Promise<any[]> {
+    const allBoxesForAddress = await this.getBoxesAtUri(
+      `/api/v1/boxes/byAddress/${address}`,
+      numberToRetrieve,
+      initialOffset,
+      numberOfTimesToRetry,
+      retryWaitTime
+    );
+    const timestampedBoxes = await this.getTimestampedBoxesFromBoxes(
+      allBoxesForAddress,
+      numberOfTimesToRetry,
+      retryWaitTime
+    );
+
+    const creditBoxToBalance = (
+      boxToDebit: IBox,
+      tokenBalances: { [key: string]: number }
+    ): { [key: string]: number } => {
+      tokenBalances.nergs = tokenBalances.nergs || 0;
+      tokenBalances.nergs += boxToDebit.value || 0;
+      boxToDebit.assets.forEach((assetToDebit) => {
+        tokenBalances[assetToDebit.tokenId] = tokenBalances[assetToDebit.tokenId] || 0;
+        tokenBalances[assetToDebit.tokenId] += assetToDebit.amount;
+      });
+      return tokenBalances;
+    };
+
+    const debitBoxFromBalance = (
+      boxToDebit: IBox,
+      tokenBalances: { [key: string]: number }
+    ): { [key: string]: number } => {
+      tokenBalances.nergs = tokenBalances.nergs || 0;
+      tokenBalances.nergs -= boxToDebit.value || 0;
+      boxToDebit.assets.forEach((assetToDebit) => {
+        tokenBalances[assetToDebit.tokenId] = tokenBalances[assetToDebit.tokenId] || 0;
+        tokenBalances[assetToDebit.tokenId] -= assetToDebit.amount;
+      });
+      return tokenBalances;
+    };
+
+    let balancesOverTime: { tokenBalances: { [key: string]: number }; box: ITimestampedBox; timestamp: number }[] = [];
+    timestampedBoxes.forEach((box) => {
+      const tokenBalances = {};
+      creditBoxToBalance(box, tokenBalances);
+      balancesOverTime.push({ tokenBalances: {}, timestamp: box.createdAt, box });
+      box.spentAt && balancesOverTime.push({ tokenBalances: {}, timestamp: box?.spentAt as number, box });
+    });
+
+    timestampedBoxes.forEach((box, boxIdx) => {
+      const creditBegins = box.createdAt;
+      const creditEnds = box.spentAt || Number.MAX_SAFE_INTEGER;
+      balancesOverTime.forEach((boxToCreditOrDebit) => {
+        if (boxToCreditOrDebit.timestamp >= creditBegins) {
+          creditBoxToBalance(box, boxToCreditOrDebit.tokenBalances);
+        }
+        if (boxToCreditOrDebit.timestamp >= creditEnds) {
+          debitBoxFromBalance(box, boxToCreditOrDebit.tokenBalances);
+        }
+      });
+    });
+
+    balancesOverTime = balancesOverTime.sort((a, b) => (a.timestamp > b.timestamp ? 1 : -1));
+    return balancesOverTime;
+  }
+
+  async getHistoricalTokenRates(
+    numberToRetrieve = 500,
+    initialOffset = 0,
+    numberOfTimesToRetry = this.defaultRetryCount,
+    retryWaitTime: number = this.defaultRetryWaitMillis
+  ): Promise<ITokenRate[]> {
+    const ergoPoolBoxes = await this.getBoxesAtUri(
+      `/api/v1/boxes/byErgoTree/${PoolSample}`,
+      numberToRetrieve,
+      initialOffset,
+      numberOfTimesToRetry,
+      retryWaitTime
+    );
+    const timestampedBoxes = await this.getTimestampsForBoxes(ergoPoolBoxes);
+    return timestampedBoxes.map(tokenSwapValueFromBox);
   }
 
   async getTokenRates(

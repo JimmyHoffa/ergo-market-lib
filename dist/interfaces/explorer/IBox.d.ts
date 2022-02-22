@@ -5,4 +5,8 @@ export interface IBox {
     transactionId: string;
     spentTransactionId: string;
     globalIndex: number;
+    spentAt?: number;
+}
+export interface ITimestampedBox extends IBox {
+    createdAt: number;
 }
