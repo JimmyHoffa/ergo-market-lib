@@ -311,11 +311,13 @@ export class ExplorerTokenMarket implements ITokenMarket {
 
     if (boxItems === undefined) return []; // Failed to retrieve values, we got nothin to give back.
 
-    // Deduplicating the tokens because only the first box per token presents an accurate valuation with the dex
+    // Finding the largest erg box as that's the correct swap pool
     return Object.values(
       timestampedBoxes.reduce((acc: any, box) => {
         const { tokenId } = box.assets[2];
-        if (acc[tokenId] === undefined) acc[tokenId] = tokenSwapValueFromBox(box);
+        const tokenRateFromBox = tokenSwapValueFromBox(box);
+        if (acc[tokenId] === undefined) acc[tokenId] = tokenRateFromBox
+        if (acc[tokenId].ergAmount < tokenRateFromBox.ergAmount) acc[tokenId] = tokenRateFromBox;
         return acc;
       }, {})
     );
@@ -359,6 +361,7 @@ export class ExplorerTokenMarket implements ITokenMarket {
 
   async getTokenBalanceByAddress(
     address: string,
+    tokenSwapValues: ITokenRate[] = [],
     numberOfTimesToRetry = this.defaultRetryCount,
     retryWaitTime: number = this.defaultRetryWaitMillis
   ): Promise<IAddressTokenAmounts | undefined> {
@@ -393,7 +396,7 @@ export class ExplorerTokenMarket implements ITokenMarket {
       curToken.total.amount = curToken.confirmed.amount + curToken.unconfirmed.amount;
     });
 
-    const tokenSwapValues = await this.getTokenRates();
+    if (tokenSwapValues.length < 1) tokenSwapValues = await this.getTokenRates();
     tokenSwapValues?.forEach((value) => this.decorateTokenAmountsWithValues(value, tokenAmountsMap));
 
     return tokenAmountsMap;

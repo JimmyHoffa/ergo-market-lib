@@ -30,7 +30,7 @@ export declare class ExplorerTokenMarket implements ITokenMarket {
     getTokenRates(numberOfTimesToRetry?: number, retryWaitTime?: number): Promise<ITokenRate[]>;
     multiplyFractions(amountA: number, decimalsA: number, amountB: number, decimalsB: number): any;
     decorateTokenAmountsWithValues(value: ITokenRate, tokenAmountsMap: IAddressTokenAmounts): void;
-    getTokenBalanceByAddress(address: string, numberOfTimesToRetry?: number, retryWaitTime?: number): Promise<IAddressTokenAmounts | undefined>;
+    getTokenBalanceByAddress(address: string, tokenSwapValues?: ITokenRate[], numberOfTimesToRetry?: number, retryWaitTime?: number): Promise<IAddressTokenAmounts | undefined>;
     getTokenInfoById(tokenId: string, numberOfTimesToRetry?: number, retryWaitTime?: number): Promise<ITokenInfo>;
     getSwappableTokens(): Promise<ITokenInfo[]>;
     getTokenRateFor(tokenIds: string[]): Promise<ITokenRate[]>;

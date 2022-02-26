@@ -190,11 +190,14 @@ class ExplorerTokenMarket {
         const timestampedBoxes = await this.getTimestampedBoxesFromBoxes(boxItems?.items || []);
         if (boxItems === undefined)
             return []; // Failed to retrieve values, we got nothin to give back.
-        // Deduplicating the tokens because only the first box per token presents an accurate valuation with the dex
+        // Finding the largest erg box as that's the correct swap pool
         return Object.values(timestampedBoxes.reduce((acc, box) => {
             const { tokenId } = box.assets[2];
+            const tokenRateFromBox = (0, exports.tokenSwapValueFromBox)(box);
             if (acc[tokenId] === undefined)
-                acc[tokenId] = (0, exports.tokenSwapValueFromBox)(box);
+                acc[tokenId] = tokenRateFromBox;
+            if (acc[tokenId].ergAmount < tokenRateFromBox.ergAmount)
+                acc[tokenId] = tokenRateFromBox;
             return acc;
         }, {}));
     }
@@ -214,7 +217,7 @@ class ExplorerTokenMarket {
         // eslint-disable-next-line no-param-reassign
         tokenAmountsMap[value.token.tokenId].value = value;
     }
-    async getTokenBalanceByAddress(address, numberOfTimesToRetry = this.defaultRetryCount, retryWaitTime = this.defaultRetryWaitMillis) {
+    async getTokenBalanceByAddress(address, tokenSwapValues = [], numberOfTimesToRetry = this.defaultRetryCount, retryWaitTime = this.defaultRetryWaitMillis) {
         const balances = await this.explorerHttpClient.requestWithRetries({
             url: `/api/v1/addresses/${address}/balance/total`,
             transformResponse: (data) => JSONBI.parse(data),
@@ -240,7 +243,8 @@ class ExplorerTokenMarket {
             curToken.confirmed = curToken.confirmed || { token, amount: 0 };
             curToken.total.amount = curToken.confirmed.amount + curToken.unconfirmed.amount;
         });
-        const tokenSwapValues = await this.getTokenRates();
+        if (tokenSwapValues.length < 1)
+            tokenSwapValues = await this.getTokenRates();
         tokenSwapValues?.forEach((value) => this.decorateTokenAmountsWithValues(value, tokenAmountsMap));
         return tokenAmountsMap;
     }
