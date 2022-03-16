@@ -14,11 +14,12 @@ export declare class ExplorerTokenMarket implements ITokenMarket {
     getTransactionTimestamp(transactionId: string): Promise<number | undefined>;
     getBoxesAtUri(uriForBoxes: string, numberToRetrieve?: number, initialOffset?: number): Promise<IBox[]>;
     getTotalBoxCount(uriForBoxes: string): Promise<number>;
-    makeChunkedRequests<T>(requestConfigs: AxiosRequestConfig<T>[], chunkSize?: number): Promise<T[]>;
+    getUniqueBoxesAtUri(uriForBoxes: string, uniqueBoxesDesired?: number, initialOffset?: number): Promise<IBox[]>;
+    makeChunkedRequests<T>(requestConfigs: AxiosRequestConfig<T>[]): Promise<T[]>;
     getTimestampsForBoxes(boxesWithoutCreationDates: IBox[]): Promise<ITimestampedBox[]>;
     getTimestampedBoxesFromBoxes(boxesToTimestamp: IBox[]): Promise<ITimestampedBox[]>;
-    getBalanceTimelineAtAddress(address: string, numberToRetrieve?: number, initialOffset?: number): Promise<any[]>;
-    getHistoricalTokenRates(numberToRetrieve?: number, initialOffset?: number): Promise<ITokenRate[]>;
+    getBalanceTimelineAtAddress(address: string, numberToRetrieve?: number): Promise<any[]>;
+    getHistoricalTokenRates(numberToRetrieve?: number): Promise<ITokenRate[]>;
     getTokenRates(): Promise<ITokenRate[]>;
     multiplyFractions(amountA: number, decimalsA: number, amountB: number, decimalsB: number): any;
     decorateTokenAmountsWithValues(value: ITokenRate, tokenAmountsMap: IAddressTokenAmounts): void;

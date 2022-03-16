@@ -34,8 +34,8 @@ describe('getHistoricalTokenRates', () => {
   it('should return less than 500 historical token rates succesfully in order', async () => {
     jest.setTimeout(200000);
     const expectedTokenRateCount = 40;
-    const tokenSwapMarketRepo = new ExplorerTokenMarket();
-    const actualTokenRates = await tokenSwapMarketRepo.getHistoricalTokenRates(expectedTokenRateCount, 23000);
+    const tokenSwapMarketRepo = new ExplorerTokenMarket({ timeout: 5000 });
+    const actualTokenRates = await tokenSwapMarketRepo.getHistoricalTokenRates(expectedTokenRateCount);
 
     expect(actualTokenRates.length).toBe(expectedTokenRateCount);
     expect(actualTokenRates[0].ergPerToken).toBeDefined();
@@ -76,7 +76,7 @@ describe('getHistoricalTokenRates', () => {
   it('should return 1222 historical token rates succesfully in order', async () => {
     jest.setTimeout(200000);
     const expectedTokenRateCount = 1222;
-    const tokenSwapMarketRepo = new ExplorerTokenMarket();
+    const tokenSwapMarketRepo = new ExplorerTokenMarket({ timeout: 15000 });
     const actualTokenRates = await tokenSwapMarketRepo.getHistoricalTokenRates(expectedTokenRateCount);
 
     expect(actualTokenRates.length).toBe(expectedTokenRateCount);

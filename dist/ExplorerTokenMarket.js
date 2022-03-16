@@ -65,7 +65,7 @@ class ExplorerTokenMarket {
         const boxPages = await this.makeChunkedRequests(requestsToMake);
         if (boxPages === undefined)
             return []; // Failed to retrieve values, we got nothin to give back.
-        return boxPages.flatMap((b) => b.items);
+        return boxPages.flatMap((b) => b?.items || []);
     }
     async getTotalBoxCount(uriForBoxes) {
         const boxPage = await this.explorerHttpClient.requestWithRetries({
@@ -74,48 +74,26 @@ class ExplorerTokenMarket {
         });
         return boxPage?.total;
     }
-    // async getUniqueBoxes(uriForBoxes: string, uniqueBoxesDesired = 500): Promise<IBox>[] {
-    //   const totalBoxCount = await this.getTotalBoxCount(uriForBoxes);
-    //   const uniqueBoxIds = new Set<string>();
-    //   const uniqueBoxes: { [key: string]: IBox } = {};
-    //   const uniqueBoxItemsToGet = Math.min(totalBoxCount, uniqueBoxesDesired);
-    //   const uniqueBoxItemsFound = uniqueBoxIds.size;
-    //   do {
-    //     const boxItems = await this.getBoxesAtUri(uriForBoxes, uniqueBoxesDesired);
-    //     if (boxItems.length === 0) return []; // Failed to retrieve values, we got nothin to give back.
-    //     boxItems.forEach((cur) => {
-    //       uniqueBoxes[cur.boxId] = cur;
-    //       uniqueBoxIds.add(cur.boxId);
-    //     });
-    //     const uniqueBoxesLeftToGet = uniqueBoxItemsToGet - uniqueBoxIds.size;
-    //     if (uniqueBoxesLeftToGet < 1) {
-    //       return Array.from(uniqueBoxIds).map((boxId: string) => uniqueBoxes[boxId]);
-    //     }
-    //     const;
-    //   } while (uniqueBoxIds.size < uniqueBoxItemsToGet);
-    // }
-    async makeChunkedRequests(requestConfigs, chunkSize = 500) {
+    async getUniqueBoxesAtUri(uriForBoxes, uniqueBoxesDesired = 500, initialOffset = 0) {
+        const totalBoxCount = await this.getTotalBoxCount(uriForBoxes);
+        const uniqueBoxIds = new Set();
+        const uniqueBoxes = {};
+        const uniqueBoxItemsToGet = Math.min(totalBoxCount, uniqueBoxesDesired);
+        let offset = initialOffset;
+        do {
+            const boxItems = await this.getBoxesAtUri(uriForBoxes, uniqueBoxesDesired, offset % totalBoxCount);
+            offset += uniqueBoxesDesired;
+            if (boxItems.length === 0)
+                return []; // Failed to retrieve values, we got nothin to give back.
+            boxItems.forEach((cur) => {
+                uniqueBoxes[cur.boxId] = cur;
+                uniqueBoxIds.add(cur.boxId);
+            });
+        } while (uniqueBoxIds.size < uniqueBoxItemsToGet);
+        return Array.from(uniqueBoxIds).map((boxId) => uniqueBoxes[boxId]);
+    }
+    async makeChunkedRequests(requestConfigs) {
         return Promise.all(requestConfigs.map((cfg) => this.explorerHttpClient.requestWithRetries(cfg)));
-        // const responseItems: T[] = [];
-        // for (let requestConfigChunk = 0; requestConfigChunk < requestConfigs.length; requestConfigChunk += chunkSize) {
-        //   /* eslint-disable-next-line no-console  */
-        //   console.log('Making a chunk request..', { requestConfigChunk, totalRequests: requestConfigs.length });
-        //   await Promise.all(
-        //     new Array(chunkSize).fill(0).map(async (blank, index) => {
-        //       const configIndex = requestConfigChunk + index;
-        //       if (configIndex >= requestConfigs.length) return;
-        //       const currentConfig = requestConfigs[configIndex];
-        //       const currentResponse = await this.explorerHttpClient.requestWithRetries<T>(currentConfig);
-        //       if (currentResponse !== undefined) responseItems.push(currentResponse);
-        //     })
-        //   );
-        //   await new Promise<void>((res) => {
-        //     setTimeout(() => {
-        //       res();
-        //     }, 500);
-        //   });
-        // }
-        // return responseItems;
     }
     async getTimestampsForBoxes(boxesWithoutCreationDates) {
         const transactionRequests = boxesWithoutCreationDates.map((box) => ({
@@ -127,6 +105,9 @@ class ExplorerTokenMarket {
                 return box;
             },
         }));
+        // const boxesOverTime = await Promise.all<ITimestampedBox>(
+        //   transactionRequests.map((cfg) => this.explorerHttpClient.requestWithRetries<ITimestampedBox>(cfg) as any)
+        // );
         const boxesOverTime = await this.makeChunkedRequests(transactionRequests);
         return boxesOverTime.sort((a, b) => (a.createdAt > b.createdAt ? 1 : -1));
     }
@@ -155,8 +136,8 @@ class ExplorerTokenMarket {
         await this.makeChunkedRequests(boxesWithSpendDatesRequest); // Adds spentAt to boxes in the transform response defined above
         return boxesWithCreation;
     }
-    async getBalanceTimelineAtAddress(address, numberToRetrieve = 500, initialOffset = 0) {
-        const allBoxesForAddress = await this.getBoxesAtUri(`/api/v1/boxes/byAddress/${address}`, numberToRetrieve, initialOffset);
+    async getBalanceTimelineAtAddress(address, numberToRetrieve = 500) {
+        const allBoxesForAddress = await this.getUniqueBoxesAtUri(`/api/v1/boxes/byAddress/${address}`, numberToRetrieve);
         const timestampedBoxes = await this.getTimestampedBoxesFromBoxes(allBoxesForAddress);
         const creditBoxToBalance = (boxToDebit, tokenBalances) => {
             tokenBalances.nergs = tokenBalances.nergs || 0;
@@ -199,21 +180,29 @@ class ExplorerTokenMarket {
         balancesOverTime = balancesOverTime.sort((a, b) => (a.timestamp > b.timestamp ? 1 : -1));
         return balancesOverTime;
     }
-    async getHistoricalTokenRates(numberToRetrieve = 500, initialOffset = 0) {
-        const ergoPoolBoxes = await this.getBoxesAtUri(`/api/v1/boxes/byErgoTree/${exports.PoolSample}`, numberToRetrieve, initialOffset);
-        const timestampedBoxes = await this.getTimestampsForBoxes(ergoPoolBoxes);
-        const tokenRates = timestampedBoxes.map(exports.tokenSwapValueFromBox);
+    async getHistoricalTokenRates(numberToRetrieve = 500) {
         const result = [];
-        tokenRates.reduce((acc, tokenRate) => {
-            const { token: { tokenId }, } = tokenRate;
-            if (acc[tokenId] === undefined)
-                acc[tokenId] = tokenRate;
-            if (parseFloat(acc[tokenId].ergAmount) > parseFloat(math_1.math.evaluate?.(`${tokenRate.ergAmount} / 3`) || '0')) {
-                acc[tokenId] = tokenRate;
-                result.push(tokenRate);
-            }
-            return acc;
-        }, {});
+        let offset = 0;
+        let numberLeftToRetrieve = numberToRetrieve;
+        while (result.length < numberToRetrieve) {
+            const ergoPoolBoxes = await this.getUniqueBoxesAtUri(`/api/v1/boxes/byErgoTree/${exports.PoolSample}`, numberLeftToRetrieve, offset);
+            if (ergoPoolBoxes.length < 1)
+                return []; // We couldn't get anything
+            offset += numberLeftToRetrieve;
+            const timestampedBoxes = await this.getTimestampsForBoxes(ergoPoolBoxes);
+            const tokenRates = timestampedBoxes.map(exports.tokenSwapValueFromBox);
+            tokenRates.reduce((acc, tokenRate) => {
+                const { token: { tokenId }, } = tokenRate;
+                if (acc[tokenId] === undefined)
+                    acc[tokenId] = tokenRate;
+                if (parseFloat(acc[tokenId].ergAmount) > parseFloat(math_1.math.evaluate?.(`${tokenRate.ergAmount} / 3`) || '0')) {
+                    acc[tokenId] = tokenRate;
+                    result.push(tokenRate);
+                }
+                return acc;
+            }, {});
+            numberLeftToRetrieve = numberToRetrieve - result.length;
+        }
         return result;
     }
     async getTokenRates() {
