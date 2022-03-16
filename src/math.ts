@@ -1,3 +1,4 @@
+/*  eslint-disable @typescript-eslint/no-non-null-assertion */
 import { all, create, MathJsStatic } from 'mathjs';
 
 export const math = create(all, {

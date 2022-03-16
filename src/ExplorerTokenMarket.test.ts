@@ -7,7 +7,7 @@ jest.setTimeout(200000);
 describe('getHistoricalTokenRatesAtAddress', () => {
   it('should return an empty array when it cant retrieve data', async () => {
     const expectedSwapValues: any[] = [];
-    const tokenSwapMarketRepo = new ExplorerTokenMarket({ explorerUri: 'http://test.example.com', defaultRetryCount: 1, defaultRetryWaitMillis: 150, throwOnError: false, axiosInstanceConfig: { timeout: 100 }});
+    const tokenSwapMarketRepo = new ExplorerTokenMarket({ retryCount: 1, retryWaitTime: 150, timeout: 100, throwOnError: false });
     
     const actualTokenRates = await tokenSwapMarketRepo.getBalanceTimelineAtAddress('asdf');
 
@@ -25,7 +25,7 @@ describe('getHistoricalTokenRatesAtAddress', () => {
 describe('getHistoricalTokenRates', () => {
   it('should return an empty array when it cant retrieve data', async () => {
     const expectedSwapValues: any[] = [];
-    const tokenSwapMarketRepo = new ExplorerTokenMarket({ explorerUri: 'http://test.example.com', defaultRetryCount: 1, defaultRetryWaitMillis: 150, throwOnError: false, axiosInstanceConfig: { timeout: 100 }});
+    const tokenSwapMarketRepo = new ExplorerTokenMarket({ retryCount: 1, retryWaitTime: 150, timeout: 100, throwOnError: false });
     
     const actualTokenRates = await tokenSwapMarketRepo.getHistoricalTokenRates(2000);
 
@@ -34,8 +34,8 @@ describe('getHistoricalTokenRates', () => {
   it('should return less than 500 historical token rates succesfully in order', async () => {
     jest.setTimeout(200000);
     const expectedTokenRateCount = 40;
-    const tokenSwapMarketRepo = new ExplorerTokenMarket();
-    const actualTokenRates = await tokenSwapMarketRepo.getHistoricalTokenRates(expectedTokenRateCount, 23000);
+    const tokenSwapMarketRepo = new ExplorerTokenMarket({ timeout: 5000 });
+    const actualTokenRates = await tokenSwapMarketRepo.getHistoricalTokenRates(expectedTokenRateCount);
 
     expect(actualTokenRates.length).toBe(expectedTokenRateCount);
     expect(actualTokenRates[0].ergPerToken).toBeDefined();
@@ -52,10 +52,11 @@ describe('getHistoricalTokenRates', () => {
     })
     jest.setTimeout(5000);
   });
+  jest.setTimeout(2000000);
   it('should return over 500 historical token rates succesfully in order', async () => {
-    jest.setTimeout(200000);
+    jest.setTimeout(2000000);
     const expectedTokenRateCount = 501;
-    const tokenSwapMarketRepo = new ExplorerTokenMarket();
+    const tokenSwapMarketRepo = new ExplorerTokenMarket({ timeout: 15000 });
     const actualTokenRates = await tokenSwapMarketRepo.getHistoricalTokenRates(expectedTokenRateCount);
 
     expect(actualTokenRates.length).toBe(expectedTokenRateCount);
@@ -75,7 +76,7 @@ describe('getHistoricalTokenRates', () => {
   it('should return 1222 historical token rates succesfully in order', async () => {
     jest.setTimeout(200000);
     const expectedTokenRateCount = 1222;
-    const tokenSwapMarketRepo = new ExplorerTokenMarket();
+    const tokenSwapMarketRepo = new ExplorerTokenMarket({ timeout: 15000 });
     const actualTokenRates = await tokenSwapMarketRepo.getHistoricalTokenRates(expectedTokenRateCount);
 
     expect(actualTokenRates.length).toBe(expectedTokenRateCount);
@@ -137,7 +138,7 @@ describe('getHistoricalTokenRates', () => {
 describe('getTokenRates', () => {
   it('should return an empty array when it cant retrieve data', async () => {
     const expectedSwapValues: any[] = [];
-    const tokenSwapMarketRepo = new ExplorerTokenMarket({ explorerUri: 'http://test.example.com', defaultRetryCount: 1, defaultRetryWaitMillis: 150, throwOnError: false, axiosInstanceConfig: { timeout: 100 }});
+    const tokenSwapMarketRepo = new ExplorerTokenMarket({ retryCount: 1, retryWaitTime: 150, timeout: 100, throwOnError: false });
     
     const actualTokenRates = await tokenSwapMarketRepo.getTokenRates();
 
@@ -160,7 +161,7 @@ describe('getTokenRates', () => {
 describe('getTokenInfoById', () => {
   it('should return undefined when it cant retrieve data', async () => {
     const expectedTokenData = undefined;
-    const tokenSwapMarketRepo = new ExplorerTokenMarket({ explorerUri: 'http://test.example.com', defaultRetryCount: 1, defaultRetryWaitMillis: 150, throwOnError: false, axiosInstanceConfig: { timeout: 100 }});
+    const tokenSwapMarketRepo = new ExplorerTokenMarket({ retryCount: 1, retryWaitTime: 150, timeout: 100, throwOnError: false });
     const actualTokenData = await tokenSwapMarketRepo.getTokenInfoById('asdf');
 
     expect(actualTokenData).toEqual(expectedTokenData);
@@ -189,7 +190,7 @@ describe('getTokenInfoById', () => {
 describe('getTokenBalanceByAddress', () => {
   it('should return undefined when it cant retrieve data', async () => {
     const expectedTokenData = undefined;
-    const tokenSwapMarketRepo = new ExplorerTokenMarket({ explorerUri: 'http://test.example.com', defaultRetryCount: 1, defaultRetryWaitMillis: 150, throwOnError: false, axiosInstanceConfig: { timeout: 100 }});
+    const tokenSwapMarketRepo = new ExplorerTokenMarket({ retryCount: 1, retryWaitTime: 150, timeout: 100, throwOnError: false });
     const actualTokenData = await tokenSwapMarketRepo.getTokenBalanceByAddress('asdf');
 
     expect(actualTokenData).toEqual(expectedTokenData);

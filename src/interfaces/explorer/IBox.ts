@@ -7,6 +7,7 @@ export interface IBox {
   spentTransactionId: string;
   globalIndex: number;
   spentAt?: number;
+  boxId: string;
 }
 
 export interface ITimestampedBox extends IBox {
