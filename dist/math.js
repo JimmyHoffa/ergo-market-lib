@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.renderFractions = exports.math = void 0;
+/*  eslint-disable @typescript-eslint/no-non-null-assertion */
 const mathjs_1 = require("mathjs");
 exports.math = (0, mathjs_1.create)(mathjs_1.all, {
     epsilon: 1e-24,

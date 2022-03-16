@@ -56,6 +56,8 @@ module.exports = {
         ],
         "import/prefer-default-export": "off",
         "@typescript-eslint/no-explicit-any": "off",
+        "no-await-in-loop": "off",
+        "no-async-promise-executor": "off",
       },
     },
   ],

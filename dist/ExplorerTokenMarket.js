@@ -5,8 +5,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ExplorerTokenMarket = exports.tokenSwapValueFromBox = exports.PoolSample = void 0;
 const json_bigint_1 = __importDefault(require("json-bigint"));
-const ExplorerRequestManager_1 = require("./ExplorerRequestManager");
 const math_1 = require("./math");
+const ProducerConsumerActionQueue_1 = require("./ProducerConsumerActionQueue");
+const QueueingExplorerRequestManager_1 = require("./QueueingExplorerRequestManager");
 exports.PoolSample = '1999030f0400040204020404040405feffffffffffffffff0105feffffffffffffffff01050004d00f040004000406050005000580dac409d819d601b2a5730000d602e4c6a70404d603db63087201d604db6308a7d605b27203730100d606b27204730200d607b27203730300d608b27204730400d6099973058c720602d60a999973068c7205027209d60bc17201d60cc1a7d60d99720b720cd60e91720d7307d60f8c720802d6107e720f06d6117e720d06d612998c720702720fd6137e720c06d6147308d6157e721206d6167e720a06d6177e720906d6189c72117217d6199c72157217d1ededededededed93c27201c2a793e4c672010404720293b27203730900b27204730a00938c7205018c720601938c7207018c72080193b17203730b9593720a730c95720e929c9c721072117e7202069c7ef07212069a9c72137e7214067e9c720d7e72020506929c9c721372157e7202069c7ef0720d069a9c72107e7214067e9c72127e7202050695ed720e917212730d907216a19d721872139d72197210ed9272189c721672139272199c7216721091720b730e';
 const JSONBI = (0, json_bigint_1.default)({ useNativeBigInt: true });
 const tokenSwapValueFromBox = (box) => {
@@ -33,66 +34,88 @@ const tokenSwapValueFromBox = (box) => {
 };
 exports.tokenSwapValueFromBox = tokenSwapValueFromBox;
 class ExplorerTokenMarket {
+    // private explorerHttpClient: ExplorerRequestManager;
     explorerHttpClient;
-    explorerUri = 'https://api.ergoplatform.com';
-    defaultRetryCount = 5;
-    defaultRetryWaitMillis = 2000;
-    throwOnError = true;
-    constructor({ explorerUri = 'https://api.ergoplatform.com', defaultRetryCount = 5, defaultRetryWaitMillis = 2000, throwOnError = true, axiosInstanceConfig = {}, } = {
-        explorerUri: 'https://api.ergoplatform.com',
-        defaultRetryCount: 5,
-        defaultRetryWaitMillis: 2000,
-        throwOnError: true,
-        axiosInstanceConfig: {},
-    }) {
-        this.explorerUri = explorerUri;
-        this.defaultRetryCount = defaultRetryCount;
-        this.defaultRetryWaitMillis = defaultRetryWaitMillis;
-        this.throwOnError = throwOnError;
-        this.explorerHttpClient = new ExplorerRequestManager_1.ExplorerRequestManager(this.explorerUri, this.throwOnError, axiosInstanceConfig);
+    requestsActionQueue;
+    constructor(explorerRequestConfig) {
+        this.requestsActionQueue = new ProducerConsumerActionQueue_1.ProducerConsumerActionQueue(10, 500);
+        this.explorerHttpClient = new QueueingExplorerRequestManager_1.QueueingExplorerRequestManager(this.requestsActionQueue, explorerRequestConfig);
     }
-    async getTransactionTimestamp(transactionId, numberOfTimesToRetry = this.defaultRetryCount, retryWaitTime = this.defaultRetryWaitMillis) {
+    async getTransactionTimestamp(transactionId) {
         const transaction = await this.explorerHttpClient.requestWithRetries({
             url: `/api/v1/transactions/${transactionId}`,
             params: {},
             transformResponse: (data) => JSONBI.parse(data),
-        }, numberOfTimesToRetry, retryWaitTime);
+        });
         return transaction?.timestamp;
     }
-    async getBoxesAtUri(uriForBoxes, numberToRetrieve = 500, initialOffset = 0, numberOfTimesToRetry = this.defaultRetryCount, retryWaitTime = this.defaultRetryWaitMillis) {
-        let boxItems = [];
+    async getBoxesAtUri(uriForBoxes, numberToRetrieve = 500, initialOffset = 0) {
+        const requestsToMake = [];
         for (let numberLeftToRetrieve = numberToRetrieve; numberLeftToRetrieve > 0;) {
-            const nextBoxItems = await this.explorerHttpClient.requestWithRetries({
+            requestsToMake.push({
                 url: uriForBoxes,
                 params: {
                     limit: Math.min(500, numberLeftToRetrieve),
                     offset: initialOffset + (numberToRetrieve - numberLeftToRetrieve),
                 },
                 transformResponse: (data) => JSONBI.parse(data),
-            }, numberOfTimesToRetry, retryWaitTime);
-            if (nextBoxItems === undefined || nextBoxItems.items.length < 1)
-                break;
-            boxItems = boxItems.concat(nextBoxItems?.items);
+            });
             numberLeftToRetrieve -= Math.min(500, numberLeftToRetrieve);
         }
-        if (boxItems === undefined)
+        const boxPages = await this.makeChunkedRequests(requestsToMake);
+        if (boxPages === undefined)
             return []; // Failed to retrieve values, we got nothin to give back.
-        return boxItems;
+        return boxPages.flatMap((b) => b.items);
     }
-    async makeChunkedRequests(requestConfigs, numberOfTimesToRetry = this.defaultRetryCount, retryWaitTime = this.defaultRetryWaitMillis, chunkSize = 100) {
-        const responseItems = [];
-        for (let requestConfigChunk = 0; requestConfigChunk < requestConfigs.length; requestConfigChunk += 100) {
-            await Promise.all(new Array(chunkSize).fill(0).map(async (blank, index) => {
-                const configIndex = requestConfigChunk + index;
-                if (configIndex >= requestConfigs.length)
-                    return;
-                const currentConfig = requestConfigs[configIndex];
-                const currentResponse = await this.explorerHttpClient.requestWithRetries(currentConfig, numberOfTimesToRetry, retryWaitTime);
-                if (currentResponse !== undefined)
-                    responseItems.push(currentResponse);
-            }));
-        }
-        return responseItems;
+    async getTotalBoxCount(uriForBoxes) {
+        const boxPage = await this.explorerHttpClient.requestWithRetries({
+            url: uriForBoxes,
+            params: { limit: 1 },
+        });
+        return boxPage?.total;
+    }
+    // async getUniqueBoxes(uriForBoxes: string, uniqueBoxesDesired = 500): Promise<IBox>[] {
+    //   const totalBoxCount = await this.getTotalBoxCount(uriForBoxes);
+    //   const uniqueBoxIds = new Set<string>();
+    //   const uniqueBoxes: { [key: string]: IBox } = {};
+    //   const uniqueBoxItemsToGet = Math.min(totalBoxCount, uniqueBoxesDesired);
+    //   const uniqueBoxItemsFound = uniqueBoxIds.size;
+    //   do {
+    //     const boxItems = await this.getBoxesAtUri(uriForBoxes, uniqueBoxesDesired);
+    //     if (boxItems.length === 0) return []; // Failed to retrieve values, we got nothin to give back.
+    //     boxItems.forEach((cur) => {
+    //       uniqueBoxes[cur.boxId] = cur;
+    //       uniqueBoxIds.add(cur.boxId);
+    //     });
+    //     const uniqueBoxesLeftToGet = uniqueBoxItemsToGet - uniqueBoxIds.size;
+    //     if (uniqueBoxesLeftToGet < 1) {
+    //       return Array.from(uniqueBoxIds).map((boxId: string) => uniqueBoxes[boxId]);
+    //     }
+    //     const;
+    //   } while (uniqueBoxIds.size < uniqueBoxItemsToGet);
+    // }
+    async makeChunkedRequests(requestConfigs, chunkSize = 500) {
+        return Promise.all(requestConfigs.map((cfg) => this.explorerHttpClient.requestWithRetries(cfg)));
+        // const responseItems: T[] = [];
+        // for (let requestConfigChunk = 0; requestConfigChunk < requestConfigs.length; requestConfigChunk += chunkSize) {
+        //   /* eslint-disable-next-line no-console  */
+        //   console.log('Making a chunk request..', { requestConfigChunk, totalRequests: requestConfigs.length });
+        //   await Promise.all(
+        //     new Array(chunkSize).fill(0).map(async (blank, index) => {
+        //       const configIndex = requestConfigChunk + index;
+        //       if (configIndex >= requestConfigs.length) return;
+        //       const currentConfig = requestConfigs[configIndex];
+        //       const currentResponse = await this.explorerHttpClient.requestWithRetries<T>(currentConfig);
+        //       if (currentResponse !== undefined) responseItems.push(currentResponse);
+        //     })
+        //   );
+        //   await new Promise<void>((res) => {
+        //     setTimeout(() => {
+        //       res();
+        //     }, 500);
+        //   });
+        // }
+        // return responseItems;
     }
     async getTimestampsForBoxes(boxesWithoutCreationDates) {
         const transactionRequests = boxesWithoutCreationDates.map((box) => ({
@@ -107,7 +130,7 @@ class ExplorerTokenMarket {
         const boxesOverTime = await this.makeChunkedRequests(transactionRequests);
         return boxesOverTime.sort((a, b) => (a.createdAt > b.createdAt ? 1 : -1));
     }
-    async getTimestampedBoxesFromBoxes(boxesToTimestamp, numberOfTimesToRetry = this.defaultRetryCount, retryWaitTime = this.defaultRetryWaitMillis) {
+    async getTimestampedBoxesFromBoxes(boxesToTimestamp) {
         const boxesWithCreationDatesRequest = boxesToTimestamp.map((box) => ({
             url: `/api/v1/transactions/${box.transactionId}`,
             params: {},
@@ -128,13 +151,13 @@ class ExplorerTokenMarket {
                 return box;
             },
         }));
-        const boxesWithCreation = (await this.makeChunkedRequests(boxesWithCreationDatesRequest, numberOfTimesToRetry, retryWaitTime)).sort((a, b) => (a.createdAt > b.createdAt ? 1 : -1));
-        await this.makeChunkedRequests(boxesWithSpendDatesRequest, numberOfTimesToRetry, retryWaitTime); // Adds spentAt to boxes in the transform response defined above
+        const boxesWithCreation = (await this.makeChunkedRequests(boxesWithCreationDatesRequest)).sort((a, b) => (a.createdAt > b.createdAt ? 1 : -1));
+        await this.makeChunkedRequests(boxesWithSpendDatesRequest); // Adds spentAt to boxes in the transform response defined above
         return boxesWithCreation;
     }
-    async getBalanceTimelineAtAddress(address, numberToRetrieve = 500, initialOffset = 0, numberOfTimesToRetry = this.defaultRetryCount, retryWaitTime = this.defaultRetryWaitMillis) {
-        const allBoxesForAddress = await this.getBoxesAtUri(`/api/v1/boxes/byAddress/${address}`, numberToRetrieve, initialOffset, numberOfTimesToRetry, retryWaitTime);
-        const timestampedBoxes = await this.getTimestampedBoxesFromBoxes(allBoxesForAddress, numberOfTimesToRetry, retryWaitTime);
+    async getBalanceTimelineAtAddress(address, numberToRetrieve = 500, initialOffset = 0) {
+        const allBoxesForAddress = await this.getBoxesAtUri(`/api/v1/boxes/byAddress/${address}`, numberToRetrieve, initialOffset);
+        const timestampedBoxes = await this.getTimestampedBoxesFromBoxes(allBoxesForAddress);
         const creditBoxToBalance = (boxToDebit, tokenBalances) => {
             tokenBalances.nergs = tokenBalances.nergs || 0;
             tokenBalances.nergs += boxToDebit.value || 0;
@@ -158,9 +181,10 @@ class ExplorerTokenMarket {
             const tokenBalances = {};
             creditBoxToBalance(box, tokenBalances);
             balancesOverTime.push({ tokenBalances: {}, timestamp: box.createdAt, box });
-            box.spentAt && balancesOverTime.push({ tokenBalances: {}, timestamp: box?.spentAt, box });
+            if (box.spentAt)
+                balancesOverTime.push({ tokenBalances: {}, timestamp: box?.spentAt, box });
         });
-        timestampedBoxes.forEach((box, boxIdx) => {
+        timestampedBoxes.forEach((box) => {
             const creditBegins = box.createdAt;
             const creditEnds = box.spentAt || Number.MAX_SAFE_INTEGER;
             balancesOverTime.forEach((boxToCreditOrDebit) => {
@@ -175,18 +199,29 @@ class ExplorerTokenMarket {
         balancesOverTime = balancesOverTime.sort((a, b) => (a.timestamp > b.timestamp ? 1 : -1));
         return balancesOverTime;
     }
-    async getHistoricalTokenRates(numberToRetrieve = 500, initialOffset = 0, numberOfTimesToRetry = this.defaultRetryCount, retryWaitTime = this.defaultRetryWaitMillis) {
-        const ergoPoolBoxes = await this.getBoxesAtUri(`/api/v1/boxes/byErgoTree/${exports.PoolSample}`, numberToRetrieve, initialOffset, numberOfTimesToRetry, retryWaitTime);
+    async getHistoricalTokenRates(numberToRetrieve = 500, initialOffset = 0) {
+        const ergoPoolBoxes = await this.getBoxesAtUri(`/api/v1/boxes/byErgoTree/${exports.PoolSample}`, numberToRetrieve, initialOffset);
         const timestampedBoxes = await this.getTimestampsForBoxes(ergoPoolBoxes);
-        const result = timestampedBoxes.map(exports.tokenSwapValueFromBox);
+        const tokenRates = timestampedBoxes.map(exports.tokenSwapValueFromBox);
+        const result = [];
+        tokenRates.reduce((acc, tokenRate) => {
+            const { token: { tokenId }, } = tokenRate;
+            if (acc[tokenId] === undefined)
+                acc[tokenId] = tokenRate;
+            if (parseFloat(acc[tokenId].ergAmount) > parseFloat(math_1.math.evaluate?.(`${tokenRate.ergAmount} / 3`) || '0')) {
+                acc[tokenId] = tokenRate;
+                result.push(tokenRate);
+            }
+            return acc;
+        }, {});
         return result;
     }
-    async getTokenRates(numberOfTimesToRetry = this.defaultRetryCount, retryWaitTime = this.defaultRetryWaitMillis) {
+    async getTokenRates() {
         const boxItems = await this.explorerHttpClient.requestWithRetries({
             url: `/api/v1/boxes/unspent/byErgoTree/${exports.PoolSample}`,
             params: { limit: 100, offset: 0 },
             transformResponse: (data) => JSONBI.parse(data),
-        }, numberOfTimesToRetry, retryWaitTime);
+        });
         const timestampedBoxes = await this.getTimestampedBoxesFromBoxes(boxItems?.items || []);
         if (boxItems === undefined)
             return []; // Failed to retrieve values, we got nothin to give back.
@@ -217,11 +252,11 @@ class ExplorerTokenMarket {
         // eslint-disable-next-line no-param-reassign
         tokenAmountsMap[value.token.tokenId].value = value;
     }
-    async getTokenBalanceByAddress(address, tokenSwapValues = [], numberOfTimesToRetry = this.defaultRetryCount, retryWaitTime = this.defaultRetryWaitMillis) {
+    async getTokenBalanceByAddress(address, tokenSwapValues = []) {
         const balances = await this.explorerHttpClient.requestWithRetries({
             url: `/api/v1/addresses/${address}/balance/total`,
             transformResponse: (data) => JSONBI.parse(data),
-        }, numberOfTimesToRetry, retryWaitTime);
+        });
         if (balances === undefined)
             return undefined; // Failed to retrieve values, we got nothin to give back.
         const tokenAmountsMap = {};
@@ -248,12 +283,12 @@ class ExplorerTokenMarket {
         tokenSwapValues?.forEach((value) => this.decorateTokenAmountsWithValues(value, tokenAmountsMap));
         return tokenAmountsMap;
     }
-    async getTokenInfoById(tokenId, numberOfTimesToRetry = this.defaultRetryCount, retryWaitTime = this.defaultRetryWaitMillis) {
+    async getTokenInfoById(tokenId) {
         const token = await this.explorerHttpClient.requestWithRetries({
             url: `/api/v1/tokens/${tokenId}`,
             params: { limit: 100, offset: 0 },
             transformResponse: (data) => JSONBI.parse(data),
-        }, numberOfTimesToRetry, retryWaitTime);
+        });
         if (token === undefined)
             return undefined; // Failed to retrieve values, we got nothin to give back.
         return token;

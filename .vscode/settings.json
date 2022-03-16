@@ -4,8 +4,8 @@
     "editor.hover.delay": 1000,
     // "editor.formatOnSave": true,
     "editor.codeActionsOnSave": {
-        "source.organizeImports": true,
-        "source.fixAll.eslint": true
+        "source.organizeImports": false,
+        "source.fixAll.eslint": false
     },
     "[typescriptreact]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode"
