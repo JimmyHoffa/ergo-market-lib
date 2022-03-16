@@ -20,6 +20,7 @@ class ProducerConsumerActionQueue {
         this.executingNow = true;
         while (this.executingNow) {
             const actionsToExecute = this.actionQueue.splice(0, this.concurrentActionCount);
+            // console.log('Going now...', { toExec: actionsToExecute.length, queued: this.actionQueue.length });
             await Promise.all(actionsToExecute.map((action) => action()));
             await new Promise((res) => {
                 setTimeout(() => res(), this.delayMillis);
