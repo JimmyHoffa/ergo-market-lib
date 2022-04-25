@@ -17,7 +17,7 @@ const explorerTokenMarket = new ExplorerTokenMarket({
   retryWaitTime: 500,
 });
 
-const getFreshBoxes = false;
+const getFreshBoxes = true;
 /* eslint-disable-next-line */
 const start = async () => {
   let allBoxes = [];
@@ -74,7 +74,7 @@ const start = async () => {
   const fileToWriteTo = path.resolve(__dirname, "ticker.json");
   console.log(`Got ${realPoolRates.length} real pool rates after filtering!`);
   console.log(`Writing now to ${fileToWriteTo}`);
-  fs.writeFileSync(fileToWriteTo, JSONBI.stringify([allBoxes]), "utf-8");
+  fs.writeFileSync(fileToWriteTo, JSONBI.stringify([realPoolRates]), "utf-8");
 };
 
 start();
